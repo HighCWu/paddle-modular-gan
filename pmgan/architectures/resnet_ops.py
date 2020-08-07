@@ -28,10 +28,28 @@ def unpool(value):
   dim = len(sh[2:])
   out = layers.reshape(value, [-1] + sh[-dim:])
   for i in range(dim+1, 1, -1):
-    out = layers.concat([out, dg.zeros_like(out)], i)
+    out = layers.concat([out, layers.zeros_like(out)], i)
   out_size = [-1] + [sh[1]] + [s * 2 for s in sh[2:]]
   out = layers.reshape(out, out_size)
   return out
+
+
+class ConvBlock(dg.Layer):
+  def __init__(self, *args, **kwargs):
+    super(ConvBlock, self).__init__()
+
+    self.scale = kwargs.pop("scale", "none")    
+    self.conv = ops.conv2d(*args, **kwargs)
+
+  def forward(self, inputs):
+    outputs = inputs
+    if self.scale == "up":
+      outputs = unpool(outputs)
+    outputs = self.conv(outputs)
+    if self.scale == "down":
+      outputs = layers.pool2d(outputs, [2, 2], "avg", pool_stride=[2, 2])
+
+    return outputs
 
 
 class ResNetBlock(abstract_arch.Module):
@@ -86,25 +104,13 @@ class ResNetBlock(abstract_arch.Module):
           "Scale: got {}, expected 'up', 'down', or 'none'.".format(scale))
 
     name = "{}_{}".format("same" if scale == "none" else scale, suffix)
-    conv = ops.conv2d(
-        in_channels,
-        output_dim=out_channels,
-        k_h=kernel_size[0], k_w=kernel_size[1],
-        d_h=strides[0], d_w=strides[1],
+    conv = ConvBlock(
+        in_channels, out_channels,
+        kernel_size, strides,
         use_sn=self._spectral_norm)
     setattr(self, name, conv)
 
-    def conv_block(inputs):
-      if inputs.shape[1] != in_channels:
-        raise ValueError("Unexpected number of input channels.")
-      outputs = inputs
-      if scale == "up":
-        outputs = unpool(outputs)
-      outputs = conv(outputs)
-      if scale == "down":
-        outputs = layers.pool2d(outputs, [2, 2], "avg", pool_stride==[2, 2])
-
-    return conv_block
+    return lambda inputs: conv(inputs, in_channels, scale)
 
   def apply(self):
     """"ResNet block containing possible down/up sampling, shared for G / D.
@@ -171,13 +177,12 @@ class ResNetBlock(abstract_arch.Module):
 class ResNetGenerator(abstract_arch.AbstractGenerator):
   """Abstract base class for generators based on the ResNet architecture."""
 
-  def _resnet_block(self, name, in_channels, out_channels, scale):
+  def _resnet_block(self, in_channels, out_channels, scale):
     """ResNet block for the generator."""
     if scale not in ["up", "none"]:
       raise ValueError(
           "Unknown generator ResNet block scaling: {}.".format(scale))
     return ResNetBlock(
-        name=name,
         in_channels=in_channels,
         out_channels=out_channels,
         scale=scale,
@@ -189,13 +194,12 @@ class ResNetGenerator(abstract_arch.AbstractGenerator):
 class ResNetDiscriminator(abstract_arch.AbstractDiscriminator):
   """Abstract base class for discriminators based on the ResNet architecture."""
 
-  def _resnet_block(self, name, in_channels, out_channels, scale):
+  def _resnet_block(self, in_channels, out_channels, scale):
     """ResNet block for the generator."""
     if scale not in ["down", "none"]:
       raise ValueError(
           "Unknown discriminator ResNet block scaling: {}.".format(scale))
     return ResNetBlock(
-        name=name,
         in_channels=in_channels,
         out_channels=out_channels,
         scale=scale,
