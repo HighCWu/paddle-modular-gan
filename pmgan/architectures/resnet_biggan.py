@@ -4,6 +4,8 @@ from __future__ import print_function
 
 from absl import logging
 
+import gin
+
 from pmgan.architectures import abstract_arch
 from pmgan.architectures import arch_ops as ops
 from pmgan.architectures import resnet_ops
@@ -255,7 +257,7 @@ class Generator(abstract_arch.AbstractGenerator):
       name = "B{}".format(block_idx + 1)
       if self._use_noise:
         setattr(self, "{}.noise_block".format(name), 
-              ops.noise_block(randomize_noise=self._randomize_noise)
+              ops.noise_block(in_channels[block_idx], randomize_noise=self._randomize_noise)
         )
       setattr(self, "{}.resnet_block".format(name), 
         self._resnet_block(
@@ -279,7 +281,7 @@ class Generator(abstract_arch.AbstractGenerator):
     logging.info("[Generator] before final processing: %s", [None, out_channels[-1], *self._image_shape[1:]])
     if self._use_noise:
       setattr(self, "final_norm.noise_block", 
-        ops.noise_block(randomize_noise=self._randomize_noise)
+        ops.noise_block(out_channels[block_idx], randomize_noise=self._randomize_noise)
       )
     setattr(self, "final_norm.batch_norm", 
       ops.batch_norm(out_channels[-1])
@@ -449,14 +451,14 @@ class Discriminator(abstract_arch.AbstractDiscriminator):
     self.num_blocks = num_blocks = len(in_channels)
     
     logging.info("[Discriminator] inputs are x=%s, y=%s", [None,*self._image_shape],
-                     None if y is None else [None,self._project_y_dim])
+                     None if not self._project_y else [None,self._project_y_dim])
 
     blocks_with_attention = set(self._blocks_with_attention)
     for block_idx in range(num_blocks):
       name = "B{}".format(block_idx + 1)
       if self._use_noise:
         setattr(self, "{}.noise_block".format(name),
-          ops.noise_block(randomize_noise=self._randomize_noise)
+          ops.noise_block(in_channels[block_idx], randomize_noise=self._randomize_noise)
         )
       is_last_block = block_idx == num_blocks - 1
       setattr(self,"{}.resnet_block".format(name), 
@@ -480,7 +482,7 @@ class Discriminator(abstract_arch.AbstractDiscriminator):
     logging.info("[Discriminator] before final processing: %s", [None,out_channels[-1],res,res])
     if self._use_noise:
       setattr(self, "final_fc.noise_block",
-        ops.noise_block(randomize_noise=self._randomize_noise)
+        ops.noise_block(out_channels[block_idx], randomize_noise=self._randomize_noise)
       )
     setattr(self, "final_fc.logit",
       ops.linear(out_channels[-1], 1, use_sn=self._spectral_norm)

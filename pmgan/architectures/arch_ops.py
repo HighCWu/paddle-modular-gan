@@ -69,13 +69,13 @@ class BatchNorm(dg.BatchNorm):
         _mean = layers.reduce_mean(inputs, axes, keep_dim=True)
         mean = layers.reduce_mean(inputs, axes, keep_dim=False)
         var = layers.reduce_mean((inputs-_mean)**2, axes)
-        self.accumulated_mean.set_value((self.accumulated_mean*self.accumulated_counter + mean) / (self.accumulated_counter + 1))
-        self.accumulated_var.set_value((self.accumulated_var*self.accumulated_counter + var) / (self.accumulated_counter + 1))
+        self.accumulated_mean.set_value(self.accumulated_mean + mean)
+        self.accumulated_var.set_value(self.accumulated_var + var)
         self.accumulated_counter.set_value(self.accumulated_counter + 1)
         _mean = self._mean*1.0
         _variance = self.variance*1.0
-        self._mean.set_value(self.accumulated_mean)
-        self._variance.set_value(self.accumulated_var)
+        self._mean.set_value(self.accumulated_mean / self.accumulated_counter)
+        self._variance.set_value(self.accumulated_var / self.accumulated_counter)
         out = super().forward(inputs, *args, **kwargs)
         self._mean.set_value(_mean)
         self._variance.set_value(_variance)
@@ -85,8 +85,8 @@ class BatchNorm(dg.BatchNorm):
 
   def check_accumulation(self):
     if self.accumulated_counter.numpy().mean() > 1-1e-12:
-      self._mean.set_value(self.accumulated_mean)
-      self._variance.set_value(self.accumulated_var)
+      self._mean.set_value(self.accumulated_mean / self.accumulated_counter)
+      self._variance.set_value(self.accumulated_var / self.accumulated_counter)
       return True
     return False
 

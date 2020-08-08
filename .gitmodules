@@ -1,0 +1,4 @@
+[submodule "compare_gan"]
+	path = compare_gan_repo
+	url = https://www.github.com/HighCWu/compare_gan
+	branch = easyhub

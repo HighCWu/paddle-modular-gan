@@ -10,7 +10,7 @@ from pmgan.architectures import arch_ops as ops
 
 from six.moves import range
 
-from paddle.fluid import layers
+from paddle.fluid import layers, dygraph as dg
 
 
 def unpool(value):
@@ -56,7 +56,6 @@ class ResNetBlock(abstract_arch.Module):
   """ResNet block with options for various normalizations."""
 
   def __init__(self,
-               name,
                in_channels,
                out_channels,
                scale,
@@ -82,7 +81,6 @@ class ResNetBlock(abstract_arch.Module):
       y_dim: Dimension numbers of classifation features y.
     """
     assert scale in ["up", "down", "none"]
-    self._name = name
     self._in_channels = in_channels
     self._out_channels = out_channels
     self._scale = scale

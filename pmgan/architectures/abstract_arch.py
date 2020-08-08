@@ -7,10 +7,11 @@ from pmgan import utils
 import gin
 import six
 
+from paddle import fluid
 from paddle.fluid import dygraph as dg
 
 
-class LayerApply(abc.ABCMeta):
+class LayerApplyMeta(fluid.core.Layer.__class__, abc.ABCMeta):
   """Meta class that runs 'apply' method after class instance created for paddle dygraph Layer class.
   """
   
@@ -18,9 +19,9 @@ class LayerApply(abc.ABCMeta):
     if "__init__" in attrs:
       __init_originl__ = attrs["__init__"]
       def __init__(self, *args, **kwargs):
-        if not hasattr(self, "__dg_layer_initialized_status__"):
+        if "__dg_layer_initialized_status__" not in self.__dict__:
           dg.Layer.__init__(self)
-          self.__dg_layer_initialized_status__ = True
+          self.__dict__["__dg_layer_initialized_status__"] = True
         __init_originl__(self, *args, **kwargs)
       attrs["__init__"] = __init__
       
@@ -32,19 +33,21 @@ class LayerApply(abc.ABCMeta):
     return instance
     
 
-@six.add_metaclass(LayerApply)
-class Module(dg.Layer):
+@six.add_metaclass(LayerApplyMeta)
+class LayerApply(object):
+  @abc.abstractmethod
+  def apply(self):
+    """Method to run after the module class initialized for building the module.
+    """
+
+
+class Module(dg.Layer, LayerApply):
   """Base class for architectures.
   """
 
   @property
   def trainable_parameters(self):
     return list(filter(lambda x: x.stop_gradient==False and x.trainable==True, self.parameters()))
-
-  @abc.abstractmethod
-  def apply(self):
-    """Method to run after the module class initialized for building the module.
-    """
 
 
 @gin.configurable("G", blacklist=["image_shape"])
